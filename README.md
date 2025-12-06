@@ -1,6 +1,14 @@
-# Welcome to your Expo app 👋
+# Expo T2 - React Native App with Material Tabs 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+
+## Features
+
+- **Material Top Tabs Navigation** - Seamless navigation between "Me" and "My Team" views
+- **Role-based Authentication** - Admin and Employee user types with different permissions
+- **Synchronized Tab State** - Tab selection persists across Home and Timecard screens
+- **Modern UI Components** - Built with React Native and Expo
+- **Persistent Storage** - User preferences saved locally with AsyncStorage
 
 ## Get started
 
@@ -16,6 +24,36 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+## Login Credentials
+
+- **Employee**: username: `user`, password: `password`
+- **Admin**: username: `admin`, password: `password`
+
+## Project Structure
+
+- `src/screens/` - Main application screens
+- `src/navigation/` - Navigation configuration
+- `components/ui/` - Reusable UI components and contexts
+- `assets/` - Images and static resources
+
+## App Features
+
+### Authentication
+- Login screen with role-based access
+- Employee users see simplified views
+- Admin users get full access to team management features
+
+### Navigation
+- Bottom tab navigation (Home, My Schedule, Time Cards, Menu)
+- Material top tabs within Home and Timecard screens
+- Synchronized tab state across screens
+- Child navigation support with state preservation
+
+### Tab Synchronization
+- Select "My Team" in Home → automatically shows "My Team" in Timecard
+- Tab selection persists during navigation
+- Automatic reset to "Me" tab on login
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)
@@ -23,17 +61,7 @@ In the output, you'll find options to open the app in a
 - [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
 - [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+You can start developing by editing the files inside the **src** directory. This project uses [React Navigation](https://reactnavigation.org/) for navigation.
 
 ## Learn more
 

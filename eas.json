@@ -11,8 +11,7 @@
       "distribution": "internal",
       "android": {
         "gradleCommand": ":app:assembleDebug",
-        "buildType": "apk",
-        "minSdkVersion": 35
+        "buildType": "apk"
       },
       "ios": {
         "buildConfiguration": "Debug",
@@ -26,8 +25,7 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease",
-        "minSdkVersion": 35
+        "gradleCommand": ":app:assembleRelease"
       },
       "ios": {
         "buildConfiguration": "Release"
@@ -46,8 +44,7 @@
       "distribution": "store",
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease",
-        "minSdkVersion": 35
+        "gradleCommand": ":app:assembleRelease"
       },
       "ios": {
         "buildConfiguration": "Release"
@@ -62,8 +59,7 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk",
-        "minSdkVersion": 35
+        "buildType": "apk"
       },
       "ios": {
         "buildConfiguration": "Release"

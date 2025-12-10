@@ -1,15 +1,26 @@
 {
   "expo": {
-    "name": "myApp",
-    "slug": "myApp",
+    "name": "Expo T2",
+    "slug": "expo-t2",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "expot2",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/your-project-id"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ibsaccount.expot2",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to capture photos for profile pictures and documents.",
+        "NSPhotoLibraryUsageDescription": "This app uses the photo library to select images for profile pictures.",
+        "NSLocationWhenInUseUsageDescription": "This app uses location services to provide location-based features."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +30,19 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.ibsaccount.expot2",
+      "versionCode": 1,
+      "minSdkVersion": 35,
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "output": "static",
@@ -28,6 +51,9 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "plugins": [
+      "expo-router"
+    ]
   }
 }

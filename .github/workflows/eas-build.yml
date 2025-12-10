@@ -1,0 +1,177 @@
+name: EAS Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select Environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      platform:
+        description: 'Select Platform'
+        required: true
+        default: 'android'
+        type: choice
+        options:
+          - android
+          - ios
+          - all
+      build_type:
+        description: 'Android Build Type (ignored for iOS)'
+        required: true
+        default: 'apk'
+        type: choice
+        options:
+          - apk
+          - aab
+      profile:
+        description: 'Custom Build Profile (optional - overrides environment)'
+        required: false
+        type: string
+
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'docs/**'
+
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'docs/**'
+
+jobs:
+  build:
+    name: EAS Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📦 Check for EXPO_TOKEN
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "❌ You must set EXPO_TOKEN secret in your repository settings"
+            echo "🔗 Visit: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "📖 Get your token from: https://expo.dev/accounts/[account]/settings/access-tokens"
+            exit 1
+          fi
+
+      - name: 🏗 Setup repo
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: npm
+
+      - name: 🏗 Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔧 Set Environment Variables
+        run: |
+          ENV="${{ github.event.inputs.environment || 'development' }}"
+          echo "Selected environment: $ENV"
+          
+          # Copy the appropriate env file
+          if [ -f ".env.${ENV}" ]; then
+            echo "📄 Using .env.${ENV}"
+            cp ".env.${ENV}" .env.local
+          else
+            echo "⚠️  Environment file .env.${ENV} not found, using default"
+            cp .env .env.local
+          fi
+          
+          # Show environment info (without secrets)
+          echo "🌍 Environment configuration:"
+          grep -E "^EXPO_PUBLIC_" .env.local | head -5
+
+      - name: 📝 Determine build profile
+        id: build_profile
+        run: |
+          CUSTOM_PROFILE="${{ github.event.inputs.profile }}"
+          ENVIRONMENT="${{ github.event.inputs.environment || 'development' }}"
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'apk' }}"
+          
+          if [ -n "$CUSTOM_PROFILE" ]; then
+            PROFILE="$CUSTOM_PROFILE"
+            echo "🎯 Using custom profile: $PROFILE"
+          else
+            if [ "$BUILD_TYPE" == "aab" ] && [ "$ENVIRONMENT" != "development" ]; then
+              PROFILE="${ENVIRONMENT}-aab"
+            else
+              PROFILE="$ENVIRONMENT"
+            fi
+            echo "🎯 Using generated profile: $PROFILE"
+          fi
+          
+          echo "profile=$PROFILE" >> $GITHUB_OUTPUT
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "build_type=$BUILD_TYPE" >> $GITHUB_OUTPUT
+
+      - name: 🏗 Build Android APK/AAB
+        if: ${{ github.event.inputs.platform == 'android' || github.event.inputs.platform == 'all' || github.event.inputs.platform == '' }}
+        run: |
+          echo "🤖 Building Android with profile: ${{ steps.build_profile.outputs.profile }}"
+          eas build --platform android --profile ${{ steps.build_profile.outputs.profile }} --non-interactive --no-wait
+        env:
+          NODE_ENV: ${{ steps.build_profile.outputs.environment }}
+
+      - name: 🏗 Build iOS
+        if: ${{ github.event.inputs.platform == 'ios' || github.event.inputs.platform == 'all' }}
+        run: |
+          echo "🍎 Building iOS with profile: ${{ steps.build_profile.outputs.profile }}"
+          eas build --platform ios --profile ${{ steps.build_profile.outputs.profile }} --non-interactive --no-wait
+        env:
+          NODE_ENV: ${{ steps.build_profile.outputs.environment }}
+
+      - name: 📤 Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.run_number }}
+          path: |
+            *.log
+            **/logs/**
+
+  build_info:
+    name: Build Information
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📋 Display Build Summary
+        run: |
+          echo "## 🚀 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment || 'development (auto)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platform**: ${{ github.event.inputs.platform || 'android (auto)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type**: ${{ github.event.inputs.build_type || 'apk (auto)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📱 Build Profiles Available:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`development\` - Debug build with development client" >> $GITHUB_STEP_SUMMARY
+          echo "- \`staging\` - Release build for internal testing" >> $GITHUB_STEP_SUMMARY
+          echo "- \`staging-aab\` - AAB build for staging" >> $GITHUB_STEP_SUMMARY
+          echo "- \`production\` - Store-ready release build" >> $GITHUB_STEP_SUMMARY
+          echo "- \`production-aab\` - AAB build for production" >> $GITHUB_STEP_SUMMARY
+          echo "- \`preview\` - Internal preview builds" >> $GITHUB_STEP_SUMMARY
+          echo "- \`preview-aab\` - AAB build for preview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Monitor build progress in [EAS Dashboard](https://expo.dev/accounts/[your-account]/projects/expo-t2/builds)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Download builds when complete" >> $GITHUB_STEP_SUMMARY
+          echo "3. Test on devices or distribute as needed" >> $GITHUB_STEP_SUMMARY

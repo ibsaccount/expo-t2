@@ -1,0 +1,90 @@
+{
+  "cli": {
+    "version": ">= 13.2.0"
+  },
+  "build": {
+    "development": {
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "gradleCommand": ":app:assembleDebug",
+        "buildType": "apk",
+        "minSdkVersion": 35
+      },
+      "ios": {
+        "buildConfiguration": "Debug",
+        "simulator": true
+      }
+    },
+    "staging": {
+      "env": {
+        "NODE_ENV": "staging"
+      },
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "minSdkVersion": 35
+      },
+      "ios": {
+        "buildConfiguration": "Release"
+      }
+    },
+    "staging-aab": {
+      "extends": "staging",
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "production": {
+      "env": {
+        "NODE_ENV": "production"
+      },
+      "distribution": "store",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "minSdkVersion": 35
+      },
+      "ios": {
+        "buildConfiguration": "Release"
+      }
+    },
+    "production-aab": {
+      "extends": "production",
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "minSdkVersion": 35
+      },
+      "ios": {
+        "buildConfiguration": "Release"
+      }
+    },
+    "preview-aab": {
+      "extends": "preview",
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {},
+    "staging": {
+      "android": {
+        "track": "alpha"
+      },
+      "ios": {
+        "appleTeamId": "YOUR_APPLE_TEAM_ID"
+      }
+    }
+  }
+}

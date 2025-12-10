@@ -13,7 +13,7 @@ import { ToasterProvider } from "../../components/ui/toaster-context";
 import { AlertProvider } from "../../components/ui/alert-context";
 import { AuthProvider, useAuth } from "../../components/ui/auth-context";
 import { TabProvider, useTab } from "../../components/ui/tab-context";
-import { useThemeColor } from "@/hooks/use-theme-color";
+import { useThemeColor } from "../../hooks/use-theme-color";
 
 export type BottomTabParamList = {
   Home: undefined;

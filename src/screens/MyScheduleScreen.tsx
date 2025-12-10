@@ -1,7 +1,7 @@
 import React, { JSX, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
 import { useAuth } from "../../components/ui/auth-context";
-import { useThemeColor } from "@/hooks/use-theme-color";
+import { useThemeColor } from "../../hooks/use-theme-color";
 import { Ionicons } from "@expo/vector-icons";
 
 interface ScheduleItem {

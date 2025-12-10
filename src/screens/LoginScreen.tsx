@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useThemeColor } from '../../hooks/use-theme-color';
 
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<void>;

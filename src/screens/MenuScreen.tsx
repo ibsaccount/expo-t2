@@ -1,8 +1,8 @@
 import React, { JSX } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Switch } from "react-native";
 import { useAuth } from "../../components/ui/auth-context";
-import { useThemeColor } from "@/hooks/use-theme-color";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useThemeColor } from "../../hooks/use-theme-color";
+import { useColorScheme } from "../../hooks/use-color-scheme";
 import { Ionicons } from "@expo/vector-icons";
 
 interface MenuItem {

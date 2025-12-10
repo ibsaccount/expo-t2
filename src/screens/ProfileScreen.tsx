@@ -1,7 +1,7 @@
 import React, { JSX } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { useAuth } from "../../components/ui/auth-context";
-import { useThemeColor } from "@/hooks/use-theme-color";
+import { useThemeColor } from "../../hooks/use-theme-color";
 
 export default function ProfileScreen(): JSX.Element {
   const { user, logout } = useAuth();

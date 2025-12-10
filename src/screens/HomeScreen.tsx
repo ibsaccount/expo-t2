@@ -4,7 +4,7 @@ import { createMaterialTopTabNavigator } from '@react-navigation/material-top-ta
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth } from "../../components/ui/auth-context";
 import { useTab } from "../../components/ui/tab-context";
-import { useThemeColor } from "@/hooks/use-theme-color";
+import { useThemeColor } from "../../hooks/use-theme-color";
 
 const Tab = createMaterialTopTabNavigator();
 

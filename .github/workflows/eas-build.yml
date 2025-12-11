@@ -3,9 +3,6 @@ name: EAS Build
 on:
   workflow_dispatch:
     inputs:
-      # ℹ️ IMPORTANT: APK/AAB options are only relevant when Android is selected
-      # If you don't select Android, the APK/AAB choices will be ignored
-      
       environment:
         description: 'Select Environment'
         required: true
@@ -16,31 +13,15 @@ on:
           - staging
           - production
       
-      # Multi-select platforms using checkboxes
-      build_android:
-        description: '📱 Build for Android'
-        required: false
-        default: true
-        type: boolean
-      
-      build_ios:
-        description: '🍎 Build for iOS'
-        required: false
-        default: false
-        type: boolean
-      
-      # Android build types (only relevant when Android is selected above)
-      build_apk:
-        description: '📦 Build APK (⚠️ Only used if Android is selected above)'
-        required: false
-        default: true
-        type: boolean
-      
-      build_aab:
-        description: '📦 Build AAB (⚠️ Only used if Android is selected above)'
-        required: false
-        default: false
-        type: boolean
+      platform:
+        description: 'Select Platform to Build'
+        required: true
+        default: 'All'
+        type: choice
+        options:
+          - All
+          - Android
+          - iOS
       
       profile:
         description: 'Custom Build Profile (optional - overrides environment)'
@@ -79,79 +60,55 @@ jobs:
           
           # Set defaults based on event type
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            BUILD_ANDROID="${{ github.event.inputs.build_android }}"
-            BUILD_IOS="${{ github.event.inputs.build_ios }}"
-            BUILD_APK="${{ github.event.inputs.build_apk }}"
-            BUILD_AAB="${{ github.event.inputs.build_aab }}"
+            PLATFORM="${{ github.event.inputs.platform }}"
             ENVIRONMENT="${{ github.event.inputs.environment }}"
           else
             # Defaults for push/PR events
-            BUILD_ANDROID="true"
-            BUILD_IOS="false"
-            BUILD_APK="true"
-            BUILD_AAB="false"
+            PLATFORM="All"
             ENVIRONMENT="development"
             echo "📋 Using defaults for ${{ github.event_name }} event"
           fi
           
+          # Determine what to build based on platform selection
+          case "$PLATFORM" in
+            "All")
+              BUILD_ANDROID="true"
+              BUILD_IOS="true"
+              echo "🚀 Building for ALL platforms (Android + iOS)"
+              ;;
+            "Android")
+              BUILD_ANDROID="true"
+              BUILD_IOS="false"
+              echo "🤖 Building for ANDROID only"
+              ;;
+            "iOS")
+              BUILD_ANDROID="false"
+              BUILD_IOS="true"
+              echo "🍎 Building for iOS only"
+              ;;
+            *)
+              echo "❌ Error: Invalid platform selection: $PLATFORM"
+              exit 1
+              ;;
+          esac
+          
           # Show current input values
-          echo "📋 Input Summary:"
+          echo "� Build Summary:"
+          echo "  - Platform: $PLATFORM"
           echo "  - Build Android: $BUILD_ANDROID"
           echo "  - Build iOS: $BUILD_IOS"
-          echo "  - Build APK: $BUILD_APK"
-          echo "  - Build AAB: $BUILD_AAB"
           echo "  - Environment: $ENVIRONMENT"
           echo ""
-          
-          # Validate that at least one platform is selected (only for manual dispatch)
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            if [ "$BUILD_ANDROID" != "true" ] && [ "$BUILD_IOS" != "true" ]; then
-              echo "❌ Error: At least one platform (Android or iOS) must be selected!"
-              exit 1
-            fi
-          fi
-          
-          # Validate Android build types ONLY when Android is selected
-          if [ "$BUILD_ANDROID" == "true" ]; then
-            echo "✅ Android platform selected - validating build types..."
-            
-            if [ "$BUILD_APK" != "true" ] && [ "$BUILD_AAB" != "true" ]; then
-              echo "❌ Error: When Android is selected, at least one Android build type (APK or AAB) must be selected!"
-              echo "💡 Tip: Check either 'Build APK' or 'Build AAB' (or both) when building for Android"
-              exit 1
-            fi
-            
-            # Show which Android build types are selected
-            SELECTED_TYPES=""
-            [ "$BUILD_APK" == "true" ] && SELECTED_TYPES="${SELECTED_TYPES}APK "
-            [ "$BUILD_AAB" == "true" ] && SELECTED_TYPES="${SELECTED_TYPES}AAB "
-            echo "📦 Selected Android build types: ${SELECTED_TYPES}"
-          else
-            echo "⏭️ Android platform not selected - APK/AAB options will be ignored"
-            
-            # Warn if APK/AAB options are selected but Android is not (only for manual dispatch)
-            if [ "${{ github.event_name }}" == "workflow_dispatch" ] && ([ "$BUILD_APK" == "true" ] || [ "$BUILD_AAB" == "true" ]); then
-              echo "⚠️ Warning: APK/AAB build options are selected but Android platform is disabled"
-              echo "💡 These options will be ignored since Android builds are not enabled"
-            fi
-          fi
           
           # Set outputs
           echo "should_build_android=$BUILD_ANDROID" >> $GITHUB_OUTPUT
           echo "should_build_ios=$BUILD_IOS" >> $GITHUB_OUTPUT
           
-          # Create Android build types array (only if Android is enabled)
+          # For Android builds, always build both APK and AAB
           ANDROID_TYPES="[]"
           if [ "$BUILD_ANDROID" == "true" ]; then
-            TYPES_LIST=""
-            [ "$BUILD_APK" == "true" ] && TYPES_LIST="${TYPES_LIST}\"apk\","
-            [ "$BUILD_AAB" == "true" ] && TYPES_LIST="${TYPES_LIST}\"aab\","
-            
-            if [ -n "$TYPES_LIST" ]; then
-              # Remove trailing comma and create proper JSON array
-              TYPES_LIST=${TYPES_LIST%,}
-              ANDROID_TYPES="[${TYPES_LIST}]"
-            fi
+            ANDROID_TYPES='["apk","aab"]'
+            echo "📦 Android build types: APK and AAB (both will be built)"
             echo "🎯 Final Android build types: $ANDROID_TYPES"
             echo "📊 JSON validation: $(echo "$ANDROID_TYPES" | jq . 2>/dev/null && echo "✅ Valid JSON" || echo "❌ Invalid JSON")"
           fi

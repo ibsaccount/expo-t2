@@ -143,15 +143,17 @@ jobs:
           # Create Android build types array (only if Android is enabled)
           ANDROID_TYPES="[]"
           if [ "$BUILD_ANDROID" == "true" ]; then
-            TYPES_STRING=""
-            [ "$BUILD_APK" == "true" ] && TYPES_STRING="${TYPES_STRING}apk "
-            [ "$BUILD_AAB" == "true" ] && TYPES_STRING="${TYPES_STRING}aab "
+            TYPES_LIST=""
+            [ "$BUILD_APK" == "true" ] && TYPES_LIST="${TYPES_LIST}\"apk\","
+            [ "$BUILD_AAB" == "true" ] && TYPES_LIST="${TYPES_LIST}\"aab\","
             
-            if [ -n "$TYPES_STRING" ]; then
-              # Convert space-separated string to JSON array
-              ANDROID_TYPES=$(echo "$TYPES_STRING" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s .)
+            if [ -n "$TYPES_LIST" ]; then
+              # Remove trailing comma and create proper JSON array
+              TYPES_LIST=${TYPES_LIST%,}
+              ANDROID_TYPES="[${TYPES_LIST}]"
             fi
             echo "🎯 Final Android build types: $ANDROID_TYPES"
+            echo "📊 JSON validation: $(echo "$ANDROID_TYPES" | jq . 2>/dev/null && echo "✅ Valid JSON" || echo "❌ Invalid JSON")"
           fi
           echo "android_build_types=$ANDROID_TYPES" >> $GITHUB_OUTPUT
           

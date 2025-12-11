@@ -12,23 +12,33 @@ on:
           - development
           - staging
           - production
-      platform:
-        description: 'Select Platform'
-        required: true
-        default: 'android'
-        type: choice
-        options:
-          - android
-          - ios
-          - all
-      build_type:
-        description: 'Android Build Type (ignored for iOS)'
-        required: true
-        default: 'apk'
-        type: choice
-        options:
-          - apk
-          - aab
+      
+      # Multi-select platforms using checkboxes
+      build_android:
+        description: '📱 Build for Android'
+        required: false
+        default: true
+        type: boolean
+      
+      build_ios:
+        description: '🍎 Build for iOS'
+        required: false
+        default: false
+        type: boolean
+      
+      # Multi-select Android build types (conditional)
+      build_apk:
+        description: '📦 Build APK (Android only)'
+        required: false
+        default: true
+        type: boolean
+      
+      build_aab:
+        description: '📦 Build AAB (Android only)'
+        required: false
+        default: false
+        type: boolean
+      
       profile:
         description: 'Custom Build Profile (optional - overrides environment)'
         required: false
@@ -49,9 +59,57 @@ on:
       - 'docs/**'
 
 jobs:
-  build:
-    name: EAS Build
+  validate_inputs:
+    name: 🔍 Validate Build Inputs
     runs-on: ubuntu-latest
+    outputs:
+      should_build_android: ${{ steps.validate.outputs.should_build_android }}
+      should_build_ios: ${{ steps.validate.outputs.should_build_ios }}
+      android_build_types: ${{ steps.validate.outputs.android_build_types }}
+      
+    steps:
+      - name: 📝 Validate and Process Inputs
+        id: validate
+        run: |
+          # Validate that at least one platform is selected
+          if [ "${{ github.event.inputs.build_android }}" != "true" ] && [ "${{ github.event.inputs.build_ios }}" != "true" ]; then
+            echo "❌ Error: At least one platform (Android or iOS) must be selected!"
+            exit 1
+          fi
+          
+          # Validate Android build types
+          if [ "${{ github.event.inputs.build_android }}" == "true" ]; then
+            if [ "${{ github.event.inputs.build_apk }}" != "true" ] && [ "${{ github.event.inputs.build_aab }}" != "true" ]; then
+              echo "❌ Error: When Android is selected, at least one build type (APK or AAB) must be selected!"
+              exit 1
+            fi
+          fi
+          
+          # Set outputs
+          echo "should_build_android=${{ github.event.inputs.build_android }}" >> $GITHUB_OUTPUT
+          echo "should_build_ios=${{ github.event.inputs.build_ios }}" >> $GITHUB_OUTPUT
+          
+          # Create Android build types array
+          ANDROID_TYPES="[]"
+          if [ "${{ github.event.inputs.build_android }}" == "true" ]; then
+            TYPES=()
+            [ "${{ github.event.inputs.build_apk }}" == "true" ] && TYPES+=("apk")
+            [ "${{ github.event.inputs.build_aab }}" == "true" ] && TYPES+=("aab")
+            ANDROID_TYPES=$(printf '%s\n' "${TYPES[@]}" | jq -R . | jq -s .)
+          fi
+          echo "android_build_types=$ANDROID_TYPES" >> $GITHUB_OUTPUT
+          
+          echo "✅ Validation completed successfully"
+
+  build_android:
+    name: 🤖 Build Android
+    runs-on: ubuntu-latest
+    needs: validate_inputs
+    if: needs.validate_inputs.outputs.should_build_android == 'true'
+    strategy:
+      matrix:
+        build_type: ${{ fromJson(needs.validate_inputs.outputs.android_build_types) }}
+      fail-fast: false
     
     steps:
       - name: 📦 Check for EXPO_TOKEN
@@ -105,7 +163,7 @@ jobs:
         run: |
           CUSTOM_PROFILE="${{ github.event.inputs.profile }}"
           ENVIRONMENT="${{ github.event.inputs.environment || 'development' }}"
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'apk' }}"
+          BUILD_TYPE="${{ matrix.build_type }}"
           
           if [ -n "$CUSTOM_PROFILE" ]; then
             PROFILE="$CUSTOM_PROFILE"
@@ -123,55 +181,368 @@ jobs:
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "build_type=$BUILD_TYPE" >> $GITHUB_OUTPUT
 
-      - name: 🏗 Build Android APK/AAB
-        if: ${{ github.event.inputs.platform == 'android' || github.event.inputs.platform == 'all' || github.event.inputs.platform == '' }}
+      - name: 🏗 Build Android ${{ matrix.build_type }}
+        id: build
         run: |
-          echo "🤖 Building Android with profile: ${{ steps.build_profile.outputs.profile }}"
-          eas build --platform android --profile ${{ steps.build_profile.outputs.profile }} --non-interactive --no-wait
+          echo "🤖 Building Android ${{ matrix.build_type }} with profile: ${{ steps.build_profile.outputs.profile }}"
+          
+          # Start the build and capture the build URL
+          BUILD_OUTPUT=$(eas build --platform android --profile ${{ steps.build_profile.outputs.profile }} --non-interactive 2>&1)
+          echo "$BUILD_OUTPUT"
+          
+          # Extract build URL and ID
+          BUILD_URL=$(echo "$BUILD_OUTPUT" | grep -o 'https://expo.dev/accounts/[^/]*/projects/[^/]*/builds/[a-f0-9-]*' | head -1)
+          BUILD_ID=$(echo "$BUILD_URL" | grep -o '[a-f0-9-]*$')
+          
+          if [ -z "$BUILD_URL" ]; then
+            echo "❌ Failed to extract build URL"
+            exit 1
+          fi
+          
+          echo "build_url=$BUILD_URL" >> $GITHUB_OUTPUT
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "📱 Build started: $BUILD_URL"
         env:
           NODE_ENV: ${{ steps.build_profile.outputs.environment }}
 
-      - name: 🏗 Build iOS
-        if: ${{ github.event.inputs.platform == 'ios' || github.event.inputs.platform == 'all' }}
+      - name: ⏳ Wait for build completion
+        id: wait
         run: |
-          echo "🍎 Building iOS with profile: ${{ steps.build_profile.outputs.profile }}"
-          eas build --platform ios --profile ${{ steps.build_profile.outputs.profile }} --non-interactive --no-wait
-        env:
-          NODE_ENV: ${{ steps.build_profile.outputs.environment }}
+          BUILD_ID="${{ steps.build.outputs.build_id }}"
+          echo "⏳ Waiting for build $BUILD_ID to complete..."
+          
+          # Wait for build to complete with timeout
+          TIMEOUT=3600  # 1 hour timeout
+          ELAPSED=0
+          SLEEP_TIME=30
+          
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            # Get build status
+            STATUS=$(eas build:view $BUILD_ID --json | jq -r '.status')
+            
+            case $STATUS in
+              "FINISHED")
+                echo "✅ Build completed successfully!"
+                
+                # Get build artifacts
+                BUILD_INFO=$(eas build:view $BUILD_ID --json)
+                ARTIFACT_URL=$(echo "$BUILD_INFO" | jq -r '.artifacts.buildUrl // empty')
+                
+                if [ -n "$ARTIFACT_URL" ] && [ "$ARTIFACT_URL" != "null" ]; then
+                  echo "artifact_url=$ARTIFACT_URL" >> $GITHUB_OUTPUT
+                  echo "📥 Artifact available at: $ARTIFACT_URL"
+                else
+                  echo "⚠️ No artifact URL found"
+                fi
+                
+                echo "status=success" >> $GITHUB_OUTPUT
+                exit 0
+                ;;
+              "ERRORED"|"CANCELED")
+                echo "❌ Build failed with status: $STATUS"
+                echo "status=failed" >> $GITHUB_OUTPUT
+                exit 1
+                ;;
+              "IN_QUEUE"|"IN_PROGRESS")
+                echo "🔄 Build status: $STATUS (elapsed: ${ELAPSED}s)"
+                ;;
+              *)
+                echo "🤔 Unknown status: $STATUS"
+                ;;
+            esac
+            
+            sleep $SLEEP_TIME
+            ELAPSED=$((ELAPSED + SLEEP_TIME))
+          done
+          
+          echo "❌ Build timed out after $TIMEOUT seconds"
+          echo "status=timeout" >> $GITHUB_OUTPUT
+          exit 1
 
-      - name: 📤 Upload build logs
-        if: failure()
+      - name: 📥 Download build artifact
+        if: steps.wait.outputs.artifact_url != ''
+        run: |
+          ARTIFACT_URL="${{ steps.wait.outputs.artifact_url }}"
+          BUILD_TYPE="${{ matrix.build_type }}"
+          ENVIRONMENT="${{ steps.build_profile.outputs.environment }}"
+          
+          # Create downloads directory
+          mkdir -p downloads
+          
+          # Determine file extension
+          if [ "$BUILD_TYPE" == "aab" ]; then
+            EXT="aab"
+          else
+            EXT="apk"
+          fi
+          
+          # Download the artifact
+          FILENAME="android-${ENVIRONMENT}-${BUILD_TYPE}.${EXT}"
+          echo "📥 Downloading $FILENAME from $ARTIFACT_URL"
+          
+          curl -L -o "downloads/$FILENAME" "$ARTIFACT_URL"
+          
+          # Verify download
+          if [ -f "downloads/$FILENAME" ]; then
+            FILE_SIZE=$(stat -c%s "downloads/$FILENAME" 2>/dev/null || stat -f%z "downloads/$FILENAME")
+            echo "✅ Downloaded $FILENAME (${FILE_SIZE} bytes)"
+            echo "filename=$FILENAME" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to download artifact"
+            exit 1
+          fi
+
+      - name: 📤 Upload build artifact
+        if: steps.wait.outputs.status == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-${{ github.run_number }}
-          path: |
-            *.log
-            **/logs/**
+          name: android-${{ steps.build_profile.outputs.environment }}-${{ matrix.build_type }}-${{ github.run_number }}
+          path: downloads/
+          retention-days: 30
 
-  build_info:
-    name: Build Information
+  build_ios:
+    name: 🍎 Build iOS
     runs-on: ubuntu-latest
+    needs: validate_inputs
+    if: needs.validate_inputs.outputs.should_build_ios == 'true'
+    
     steps:
-      - name: 📋 Display Build Summary
+      - name: 📦 Check for EXPO_TOKEN
         run: |
-          echo "## 🚀 Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment**: ${{ github.event.inputs.environment || 'development (auto)' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Platform**: ${{ github.event.inputs.platform || 'android (auto)' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Type**: ${{ github.event.inputs.build_type || 'apk (auto)' }}" >> $GITHUB_STEP_SUMMARY
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "❌ You must set EXPO_TOKEN secret in your repository settings"
+            echo "🔗 Visit: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "📖 Get your token from: https://expo.dev/accounts/[account]/settings/access-tokens"
+            exit 1
+          fi
+
+      - name: 🏗 Setup repo
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: 🏗 Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔧 Set Environment Variables
+        run: |
+          ENV="${{ github.event.inputs.environment || 'development' }}"
+          echo "Selected environment: $ENV"
+          
+          # Copy the appropriate env file
+          if [ -f ".env.${ENV}" ]; then
+            echo "📄 Using .env.${ENV}"
+            cp ".env.${ENV}" .env.local
+          else
+            echo "⚠️  Environment file .env.${ENV} not found, using default"
+            cp .env .env.local
+          fi
+          
+          # Show environment info (without secrets)
+          echo "🌍 Environment configuration:"
+          grep -E "^EXPO_PUBLIC_" .env.local | head -5
+
+      - name: 📝 Determine build profile
+        id: build_profile
+        run: |
+          CUSTOM_PROFILE="${{ github.event.inputs.profile }}"
+          ENVIRONMENT="${{ github.event.inputs.environment || 'development' }}"
+          
+          if [ -n "$CUSTOM_PROFILE" ]; then
+            PROFILE="$CUSTOM_PROFILE"
+            echo "🎯 Using custom profile: $PROFILE"
+          else
+            PROFILE="$ENVIRONMENT"
+            echo "🎯 Using generated profile: $PROFILE"
+          fi
+          
+          echo "profile=$PROFILE" >> $GITHUB_OUTPUT
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+
+      - name: 🏗 Build iOS
+        id: build
+        run: |
+          echo "🍎 Building iOS with profile: ${{ steps.build_profile.outputs.profile }}"
+          
+          # Start the build and capture the build URL
+          BUILD_OUTPUT=$(eas build --platform ios --profile ${{ steps.build_profile.outputs.profile }} --non-interactive 2>&1)
+          echo "$BUILD_OUTPUT"
+          
+          # Extract build URL and ID
+          BUILD_URL=$(echo "$BUILD_OUTPUT" | grep -o 'https://expo.dev/accounts/[^/]*/projects/[^/]*/builds/[a-f0-9-]*' | head -1)
+          BUILD_ID=$(echo "$BUILD_URL" | grep -o '[a-f0-9-]*$')
+          
+          if [ -z "$BUILD_URL" ]; then
+            echo "❌ Failed to extract build URL"
+            exit 1
+          fi
+          
+          echo "build_url=$BUILD_URL" >> $GITHUB_OUTPUT
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "🍎 Build started: $BUILD_URL"
+        env:
+          NODE_ENV: ${{ steps.build_profile.outputs.environment }}
+
+      - name: ⏳ Wait for iOS build completion
+        id: wait
+        run: |
+          BUILD_ID="${{ steps.build.outputs.build_id }}"
+          echo "⏳ Waiting for iOS build $BUILD_ID to complete..."
+          
+          # Wait for build to complete with timeout
+          TIMEOUT=3600  # 1 hour timeout
+          ELAPSED=0
+          SLEEP_TIME=30
+          
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            # Get build status
+            STATUS=$(eas build:view $BUILD_ID --json | jq -r '.status')
+            
+            case $STATUS in
+              "FINISHED")
+                echo "✅ iOS build completed successfully!"
+                echo "status=success" >> $GITHUB_OUTPUT
+                exit 0
+                ;;
+              "ERRORED"|"CANCELED")
+                echo "❌ iOS build failed with status: $STATUS"
+                echo "status=failed" >> $GITHUB_OUTPUT
+                exit 1
+                ;;
+              "IN_QUEUE"|"IN_PROGRESS")
+                echo "🔄 iOS build status: $STATUS (elapsed: ${ELAPSED}s)"
+                ;;
+              *)
+                echo "🤔 Unknown status: $STATUS"
+                ;;
+            esac
+            
+            sleep $SLEEP_TIME
+            ELAPSED=$((ELAPSED + SLEEP_TIME))
+          done
+          
+          echo "❌ iOS build timed out after $TIMEOUT seconds"
+          echo "status=timeout" >> $GITHUB_OUTPUT
+          exit 1
+
+  build_summary:
+    name: 📊 Build Summary & Validation
+    runs-on: ubuntu-latest
+    needs: [validate_inputs, build_android, build_ios]
+    if: always()
+    
+    steps:
+      - name: � Check Build Results
+        id: check_results
+        run: |
+          ANDROID_NEEDED="${{ needs.validate_inputs.outputs.should_build_android }}"
+          IOS_NEEDED="${{ needs.validate_inputs.outputs.should_build_ios }}"
+          
+          ANDROID_RESULT="${{ needs.build_android.result }}"
+          IOS_RESULT="${{ needs.build_ios.result }}"
+          
+          ALL_PASSED=true
+          
+          echo "## 🚀 Build Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check Android results
+          if [ "$ANDROID_NEEDED" == "true" ]; then
+            echo "### 🤖 Android Builds" >> $GITHUB_STEP_SUMMARY
+            if [ "$ANDROID_RESULT" == "success" ]; then
+              echo "✅ **Android builds completed successfully**" >> $GITHUB_STEP_SUMMARY
+              
+              # List Android artifacts
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Available Android Artifacts:**" >> $GITHUB_STEP_SUMMARY
+              
+              if [ "${{ github.event.inputs.build_apk }}" == "true" ]; then
+                echo "- 📦 APK build (android-${{ github.event.inputs.environment }}-apk-${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY
+              fi
+              
+              if [ "${{ github.event.inputs.build_aab }}" == "true" ]; then
+                echo "- 📦 AAB build (android-${{ github.event.inputs.environment }}-aab-${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "❌ **Android builds failed**" >> $GITHUB_STEP_SUMMARY
+              ALL_PASSED=false
+            fi
+          else
+            echo "### 🤖 Android Builds" >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ Skipped (not requested)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check iOS results
+          if [ "$IOS_NEEDED" == "true" ]; then
+            echo "### 🍎 iOS Builds" >> $GITHUB_STEP_SUMMARY
+            if [ "$IOS_RESULT" == "success" ]; then
+              echo "✅ **iOS build completed successfully**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **iOS build failed**" >> $GITHUB_STEP_SUMMARY
+              ALL_PASSED=false
+            fi
+          else
+            echo "### 🍎 iOS Builds" >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ Skipped (not requested)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Overall status
+          echo "### 🎯 Overall Status" >> $GITHUB_STEP_SUMMARY
+          if [ "$ALL_PASSED" == "true" ]; then
+            echo "🎉 **All builds completed successfully!**" >> $GITHUB_STEP_SUMMARY
+            echo "all_passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "💥 **Some builds failed**" >> $GITHUB_STEP_SUMMARY
+            echo "all_passed=false" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Build Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Android**: ${{ github.event.inputs.build_android == 'true' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.build_android }}" == "true" ]; then
+            echo "  - APK: ${{ github.event.inputs.build_apk == 'true' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+            echo "  - AAB: ${{ github.event.inputs.build_aab == 'true' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "- **iOS**: ${{ github.event.inputs.build_ios == 'true' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📱 Build Profiles Available:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`development\` - Debug build with development client" >> $GITHUB_STEP_SUMMARY
-          echo "- \`staging\` - Release build for internal testing" >> $GITHUB_STEP_SUMMARY
-          echo "- \`staging-aab\` - AAB build for staging" >> $GITHUB_STEP_SUMMARY
-          echo "- \`production\` - Store-ready release build" >> $GITHUB_STEP_SUMMARY
-          echo "- \`production-aab\` - AAB build for production" >> $GITHUB_STEP_SUMMARY
-          echo "- \`preview\` - Internal preview builds" >> $GITHUB_STEP_SUMMARY
-          echo "- \`preview-aab\` - AAB build for preview" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔧 Next Steps:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Monitor build progress in [EAS Dashboard](https://expo.dev/accounts/[your-account]/projects/expo-t2/builds)" >> $GITHUB_STEP_SUMMARY
-          echo "2. Download builds when complete" >> $GITHUB_STEP_SUMMARY
-          echo "3. Test on devices or distribute as needed" >> $GITHUB_STEP_SUMMARY
+          echo "### � Download Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to the [Actions tab](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "2. Scroll down to the **Artifacts** section" >> $GITHUB_STEP_SUMMARY
+          echo "3. Download the desired build artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "4. Extract and install on your devices" >> $GITHUB_STEP_SUMMARY
+
+      - name: ✅ Ensure All Builds Passed
+        if: steps.check_results.outputs.all_passed != 'true'
+        run: |
+          echo "❌ Build validation failed: Not all required builds completed successfully"
+          echo "Please check the individual job results above for details"
+          exit 1
+
+      - name: 🎉 Build Success
+        if: steps.check_results.outputs.all_passed == 'true'
+        run: |
+          echo "🎉 All builds completed successfully!"
+          echo "✅ Build pipeline validation passed"
+          echo "📦 All artifacts are ready for download"

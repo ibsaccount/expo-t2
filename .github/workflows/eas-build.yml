@@ -75,26 +75,47 @@ jobs:
         id: validate
         run: |
           echo "🔍 Starting input validation..."
+          echo "Event type: ${{ github.event_name }}"
+          
+          # Set defaults based on event type
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            BUILD_ANDROID="${{ github.event.inputs.build_android }}"
+            BUILD_IOS="${{ github.event.inputs.build_ios }}"
+            BUILD_APK="${{ github.event.inputs.build_apk }}"
+            BUILD_AAB="${{ github.event.inputs.build_aab }}"
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          else
+            # Defaults for push/PR events
+            BUILD_ANDROID="true"
+            BUILD_IOS="false"
+            BUILD_APK="true"
+            BUILD_AAB="false"
+            ENVIRONMENT="development"
+            echo "📋 Using defaults for ${{ github.event_name }} event"
+          fi
           
           # Show current input values
           echo "📋 Input Summary:"
-          echo "  - Build Android: ${{ github.event.inputs.build_android }}"
-          echo "  - Build iOS: ${{ github.event.inputs.build_ios }}"
-          echo "  - Build APK: ${{ github.event.inputs.build_apk }}"
-          echo "  - Build AAB: ${{ github.event.inputs.build_aab }}"
+          echo "  - Build Android: $BUILD_ANDROID"
+          echo "  - Build iOS: $BUILD_IOS"
+          echo "  - Build APK: $BUILD_APK"
+          echo "  - Build AAB: $BUILD_AAB"
+          echo "  - Environment: $ENVIRONMENT"
           echo ""
           
-          # Validate that at least one platform is selected
-          if [ "${{ github.event.inputs.build_android }}" != "true" ] && [ "${{ github.event.inputs.build_ios }}" != "true" ]; then
-            echo "❌ Error: At least one platform (Android or iOS) must be selected!"
-            exit 1
+          # Validate that at least one platform is selected (only for manual dispatch)
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            if [ "$BUILD_ANDROID" != "true" ] && [ "$BUILD_IOS" != "true" ]; then
+              echo "❌ Error: At least one platform (Android or iOS) must be selected!"
+              exit 1
+            fi
           fi
           
           # Validate Android build types ONLY when Android is selected
-          if [ "${{ github.event.inputs.build_android }}" == "true" ]; then
+          if [ "$BUILD_ANDROID" == "true" ]; then
             echo "✅ Android platform selected - validating build types..."
             
-            if [ "${{ github.event.inputs.build_apk }}" != "true" ] && [ "${{ github.event.inputs.build_aab }}" != "true" ]; then
+            if [ "$BUILD_APK" != "true" ] && [ "$BUILD_AAB" != "true" ]; then
               echo "❌ Error: When Android is selected, at least one Android build type (APK or AAB) must be selected!"
               echo "💡 Tip: Check either 'Build APK' or 'Build AAB' (or both) when building for Android"
               exit 1
@@ -102,38 +123,40 @@ jobs:
             
             # Show which Android build types are selected
             SELECTED_TYPES=""
-            [ "${{ github.event.inputs.build_apk }}" == "true" ] && SELECTED_TYPES="${SELECTED_TYPES}APK "
-            [ "${{ github.event.inputs.build_aab }}" == "true" ] && SELECTED_TYPES="${SELECTED_TYPES}AAB "
+            [ "$BUILD_APK" == "true" ] && SELECTED_TYPES="${SELECTED_TYPES}APK "
+            [ "$BUILD_AAB" == "true" ] && SELECTED_TYPES="${SELECTED_TYPES}AAB "
             echo "📦 Selected Android build types: ${SELECTED_TYPES}"
           else
             echo "⏭️ Android platform not selected - APK/AAB options will be ignored"
             
-            # Warn if APK/AAB options are selected but Android is not
-            if [ "${{ github.event.inputs.build_apk }}" == "true" ] || [ "${{ github.event.inputs.build_aab }}" == "true" ]; then
+            # Warn if APK/AAB options are selected but Android is not (only for manual dispatch)
+            if [ "${{ github.event_name }}" == "workflow_dispatch" ] && ([ "$BUILD_APK" == "true" ] || [ "$BUILD_AAB" == "true" ]); then
               echo "⚠️ Warning: APK/AAB build options are selected but Android platform is disabled"
               echo "💡 These options will be ignored since Android builds are not enabled"
             fi
           fi
           
           # Set outputs
-          echo "should_build_android=${{ github.event.inputs.build_android }}" >> $GITHUB_OUTPUT
-          echo "should_build_ios=${{ github.event.inputs.build_ios }}" >> $GITHUB_OUTPUT
+          echo "should_build_android=$BUILD_ANDROID" >> $GITHUB_OUTPUT
+          echo "should_build_ios=$BUILD_IOS" >> $GITHUB_OUTPUT
           
           # Create Android build types array (only if Android is enabled)
           ANDROID_TYPES="[]"
-          if [ "${{ github.event.inputs.build_android }}" == "true" ]; then
-            TYPES=()
-            [ "${{ github.event.inputs.build_apk }}" == "true" ] && TYPES+=("apk")
-            [ "${{ github.event.inputs.build_aab }}" == "true" ] && TYPES+=("aab")
-            ANDROID_TYPES=$(printf '%s\n' "${TYPES[@]}" | jq -R . | jq -s .)
+          if [ "$BUILD_ANDROID" == "true" ]; then
+            TYPES_STRING=""
+            [ "$BUILD_APK" == "true" ] && TYPES_STRING="${TYPES_STRING}apk "
+            [ "$BUILD_AAB" == "true" ] && TYPES_STRING="${TYPES_STRING}aab "
+            
+            if [ -n "$TYPES_STRING" ]; then
+              # Convert space-separated string to JSON array
+              ANDROID_TYPES=$(echo "$TYPES_STRING" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s .)
+            fi
             echo "🎯 Final Android build types: $ANDROID_TYPES"
           fi
           echo "android_build_types=$ANDROID_TYPES" >> $GITHUB_OUTPUT
           
           echo ""
           echo "✅ Input validation completed successfully!"
-          
-          echo "✅ Validation completed successfully"
 
   build_android:
     name: 🤖 Build Android
@@ -161,7 +184,7 @@ jobs:
       - name: 🏗 Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 21.x
           cache: npm
 
       - name: 🏗 Setup EAS
@@ -356,7 +379,7 @@ jobs:
       - name: 🏗 Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 21.x
           cache: npm
 
       - name: 🏗 Setup EAS

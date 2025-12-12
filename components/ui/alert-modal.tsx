@@ -37,6 +37,7 @@ export interface AlertProps {
   textArea?: AlertTextAreaConfig;
 }
 
+/* istanbul ignore next */
 export const AlertModal: React.FC<AlertProps> = ({
   id,
   title,

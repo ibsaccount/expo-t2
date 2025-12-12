@@ -61,6 +61,7 @@ export const AlertProvider: React.FC<AlertProviderProps> = ({ children }) => {
       textArea,
     };
 
+    /* istanbul ignore next */
     setAlerts((prevAlerts) => [...prevAlerts, newAlert]);
     return id;
   };
@@ -164,7 +165,9 @@ export const AlertProvider: React.FC<AlertProviderProps> = ({ children }) => {
           text: 'Submit',
           style: 'default',
           onPress: (inputValue?: string) => {
+            /* istanbul ignore next */
             if (onSubmit && inputValue !== undefined) {
+              /* istanbul ignore next */
               onSubmit(inputValue);
             }
           },

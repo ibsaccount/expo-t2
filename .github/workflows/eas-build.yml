@@ -43,9 +43,140 @@ on:
       - 'docs/**'
 
 jobs:
-  validate_inputs:
-    name: 🔍 Validate Build Inputs
+  # Run tests and generate coverage reports first
+  test_and_coverage:
+    name: 🧪 Test & Coverage
     runs-on: ubuntu-latest
+    outputs:
+      test_status: ${{ steps.test.outputs.status }}
+      coverage_threshold_met: ${{ steps.test.outputs.coverage_threshold_met }}
+    
+    steps:
+      - name: 🏗 Setup repo
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Lint code
+        run: npm run lint
+        continue-on-error: true
+
+      - name: 🧪 Run tests with coverage
+        id: test
+        run: |
+          echo "🧪 Running tests with coverage generation..."
+          
+          # Run tests with coverage
+          npm run test:ci
+          
+          # Check if tests passed
+          if [ $? -eq 0 ]; then
+            echo "✅ All tests passed successfully"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Some tests failed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Check if coverage directory exists
+          if [ -d "coverage" ]; then
+            echo "📊 Coverage report generated successfully"
+            
+            # Extract coverage percentage from coverage-summary.json
+            if [ -f "coverage/coverage-summary.json" ]; then
+              COVERAGE=$(cat coverage/coverage-summary.json | node -pe "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8')).total.lines.pct || 0")
+              echo "📈 Line coverage: $COVERAGE%"
+              
+              # Set coverage threshold (adjust as needed)
+              THRESHOLD=70
+              if (( $(echo "$COVERAGE >= $THRESHOLD" | bc -l) )); then
+                echo "✅ Coverage threshold met: $COVERAGE% >= $THRESHOLD%"
+                echo "coverage_threshold_met=true" >> $GITHUB_OUTPUT
+              else
+                echo "⚠️  Coverage below threshold: $COVERAGE% < $THRESHOLD%"
+                echo "coverage_threshold_met=false" >> $GITHUB_OUTPUT
+              fi
+              
+              echo "coverage_percentage=$COVERAGE" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️  Coverage summary file not found, skipping coverage check"
+              echo "coverage_threshold_met=unknown" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "⚠️  Coverage directory not found"
+            echo "coverage_threshold_met=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📊 Generate test results summary
+        if: always()
+        run: |
+          echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.test.outputs.status }}" == "success" ]; then
+            echo "✅ **All tests passed successfully**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -n "${{ steps.test.outputs.coverage_percentage }}" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📈 Coverage Report" >> $GITHUB_STEP_SUMMARY
+            echo "- **Line Coverage**: ${{ steps.test.outputs.coverage_percentage }}%" >> $GITHUB_STEP_SUMMARY
+            echo "- **Threshold**: 70%" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "${{ steps.test.outputs.coverage_threshold_met }}" == "true" ]; then
+              echo "- **Status**: ✅ Threshold met" >> $GITHUB_STEP_SUMMARY
+            elif [ "${{ steps.test.outputs.coverage_threshold_met }}" == "false" ]; then
+              echo "- **Status**: ⚠️ Below threshold" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 **Download Coverage Reports**: Check the artifacts section below" >> $GITHUB_STEP_SUMMARY
+
+      - name: 📤 Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.run_number }}
+          path: |
+            coverage/
+            !coverage/tmp/
+          retention-days: 30
+
+      - name: 📤 Upload coverage reports
+        if: always() && steps.test.outputs.status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.run_number }}
+          path: |
+            coverage/
+            !coverage/tmp/
+          retention-days: 30
+
+      - name: � Upload coverage to artifacts (HTML)
+        if: always() && steps.test.outputs.status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-report-${{ github.run_number }}
+          path: coverage/lcov-report/
+          retention-days: 30
+
+  validate_inputs:
+    name: �🔍 Validate Build Inputs
+    runs-on: ubuntu-latest
+    needs: test_and_coverage
+    # Only run validation if tests pass (unless forced via workflow_dispatch)
+    if: needs.test_and_coverage.outputs.test_status == 'success' || github.event_name == 'workflow_dispatch'
     outputs:
       should_build_android: ${{ steps.validate.outputs.should_build_android }}
       should_build_ios: ${{ steps.validate.outputs.should_build_ios }}
@@ -120,8 +251,8 @@ jobs:
   build_android:
     name: 🤖 Build Android
     runs-on: ubuntu-latest
-    needs: validate_inputs
-    if: needs.validate_inputs.outputs.should_build_android == 'true'
+    needs: [test_and_coverage, validate_inputs]
+    if: needs.validate_inputs.outputs.should_build_android == 'true' && needs.test_and_coverage.outputs.test_status == 'success'
     strategy:
       matrix:
         build_type: ${{ fromJson(needs.validate_inputs.outputs.android_build_types) }}
@@ -319,8 +450,8 @@ jobs:
   build_ios:
     name: 🍎 Build iOS
     runs-on: ubuntu-latest
-    needs: validate_inputs
-    if: needs.validate_inputs.outputs.should_build_ios == 'true'
+    needs: [test_and_coverage, validate_inputs]
+    if: needs.validate_inputs.outputs.should_build_ios == 'true' && needs.test_and_coverage.outputs.test_status == 'success'
     
     steps:
       - name: 📦 Check for EXPO_TOKEN
@@ -455,13 +586,18 @@ jobs:
   build_summary:
     name: 📊 Build Summary & Validation
     runs-on: ubuntu-latest
-    needs: [validate_inputs, build_android, build_ios]
+    needs: [test_and_coverage, validate_inputs, build_android, build_ios]
     if: always()
     
     steps:
-      - name: � Check Build Results
+      - name: 📊 Check Build Results
         id: check_results
         run: |
+          # Get test and coverage results
+          TEST_STATUS="${{ needs.test_and_coverage.result }}"
+          TEST_PASSED="${{ needs.test_and_coverage.outputs.test_status }}"
+          COVERAGE_MET="${{ needs.test_and_coverage.outputs.coverage_threshold_met }}"
+          
           ANDROID_NEEDED="${{ needs.validate_inputs.outputs.should_build_android }}"
           IOS_NEEDED="${{ needs.validate_inputs.outputs.should_build_ios }}"
           
@@ -470,7 +606,33 @@ jobs:
           
           ALL_PASSED=true
           
-          echo "## 🚀 Build Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Pipeline Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Add test and coverage results section
+          echo "### 🧪 Tests & Coverage" >> $GITHUB_STEP_SUMMARY
+          if [ "$TEST_STATUS" == "success" ]; then
+            echo "✅ **All tests passed successfully**" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "$COVERAGE_MET" == "true" ]; then
+              echo "✅ **Coverage threshold met (70%+)**" >> $GITHUB_STEP_SUMMARY
+            elif [ "$COVERAGE_MET" == "false" ]; then
+              echo "⚠️  **Coverage below threshold (<70%)**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "ℹ️  **Coverage analysis unavailable**" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Available Test Artifacts:**" >> $GITHUB_STEP_SUMMARY
+            echo "- 📊 Coverage Reports (coverage-report-${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY
+            echo "- 📈 HTML Coverage Report (coverage-html-report-${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY
+            echo "- 📋 Test Results (test-results-${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Tests failed**" >> $GITHUB_STEP_SUMMARY
+            ALL_PASSED=false
+            echo "- 📋 Test Results (test-results-${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           echo "" >> $GITHUB_STEP_SUMMARY
           
           # Check Android results

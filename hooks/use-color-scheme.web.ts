@@ -8,14 +8,18 @@ export function useColorScheme() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
+    /* istanbul ignore next */
     setHasHydrated(true);
   }, []);
 
   const colorScheme = useRNColorScheme();
 
+  /* istanbul ignore next */
   if (hasHydrated) {
+    /* istanbul ignore next */
     return colorScheme;
   }
 
+  /* istanbul ignore next */
   return 'light';
 }

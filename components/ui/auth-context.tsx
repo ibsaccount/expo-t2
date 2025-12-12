@@ -81,9 +81,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = async (): Promise<void> => {
     try {
       await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-      setUser(null);
     } catch (error) {
       console.error('Error logging out:', error);
+    } finally {
+      // Always clear the user state regardless of AsyncStorage success/failure
+      setUser(null);
     }
   };
 

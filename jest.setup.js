@@ -91,10 +91,10 @@ jest.mock('react-native', () => {
       timing: jest.fn(() => ({
         start: jest.fn((callback) => callback && callback()),
       })),
-      sequence: jest.fn(() => ({
+      sequence: jest.fn((animations) => ({
         start: jest.fn((callback) => callback && callback()),
       })),
-      parallel: jest.fn(() => ({
+      parallel: jest.fn((animations) => ({
         start: jest.fn((callback) => callback && callback()),
       })),
       loop: jest.fn(() => ({
@@ -102,9 +102,6 @@ jest.mock('react-native', () => {
         stop: jest.fn(),
       })),
       delay: jest.fn(() => ({
-        start: jest.fn((callback) => callback && callback()),
-      })),
-      parallel: jest.fn((animations) => ({
         start: jest.fn((callback) => callback && callback()),
       })),
     },
@@ -138,6 +135,18 @@ jest.mock('react-native', () => {
     TouchableOpacity: Pressable,
     FlatList: View,
     Image: View,
+    KeyboardAvoidingView: View,
+    TouchableOpacity: React.forwardRef((props, ref) => {
+      const element = React.createElement('div', { 
+        ...props, 
+        ref,
+        onClick: props.onPress,
+        'data-testid': 'touchable-opacity-element'
+      }, props.children);
+      
+      element.props = { ...props };
+      return element;
+    }),
   };
 });
 

@@ -101,8 +101,8 @@ const SimpleToaster = (props: ToasterProps) => {
 
   return (
     <View testID="toaster-container">
-      {toasts.map((toast) => (
-        <SimpleToasterItem key={toast.id} {...toast} onRemove={onRemove} />
+      {toasts.map((toast, index) => (
+        <SimpleToasterItem key={`${toast.id}-${index}`} {...toast} onRemove={onRemove} />
       ))}
     </View>
   );

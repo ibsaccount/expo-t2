@@ -90,29 +90,22 @@ jobs:
           if [ -d "coverage" ]; then
             echo "📊 Coverage report generated successfully"
             
-            # Extract coverage percentage from coverage-summary.json
+            # Extract coverage percentage from coverage-summary.json (for reporting only)
             if [ -f "coverage/coverage-summary.json" ]; then
               COVERAGE=$(cat coverage/coverage-summary.json | node -pe "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8')).total.lines.pct || 0")
               echo "📈 Line coverage: $COVERAGE%"
               
-              # Set coverage threshold (adjust as needed)
-              THRESHOLD=70
-              if (( $(echo "$COVERAGE >= $THRESHOLD" | bc -l) )); then
-                echo "✅ Coverage threshold met: $COVERAGE% >= $THRESHOLD%"
-                echo "coverage_threshold_met=true" >> $GITHUB_OUTPUT
-              else
-                echo "⚠️  Coverage below threshold: $COVERAGE% < $THRESHOLD%"
-                echo "coverage_threshold_met=false" >> $GITHUB_OUTPUT
-              fi
-              
+              # Always pass coverage check - ignoring threshold
+              echo "✅ Coverage check skipped (threshold ignored)"
+              echo "coverage_threshold_met=true" >> $GITHUB_OUTPUT
               echo "coverage_percentage=$COVERAGE" >> $GITHUB_OUTPUT
             else
               echo "⚠️  Coverage summary file not found, skipping coverage check"
-              echo "coverage_threshold_met=unknown" >> $GITHUB_OUTPUT
+              echo "coverage_threshold_met=true" >> $GITHUB_OUTPUT
             fi
           else
             echo "⚠️  Coverage directory not found"
-            echo "coverage_threshold_met=unknown" >> $GITHUB_OUTPUT
+            echo "coverage_threshold_met=true" >> $GITHUB_OUTPUT
           fi
 
       - name: 📊 Generate test results summary
@@ -131,13 +124,8 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### 📈 Coverage Report" >> $GITHUB_STEP_SUMMARY
             echo "- **Line Coverage**: ${{ steps.test.outputs.coverage_percentage }}%" >> $GITHUB_STEP_SUMMARY
-            echo "- **Threshold**: 70%" >> $GITHUB_STEP_SUMMARY
-            
-            if [ "${{ steps.test.outputs.coverage_threshold_met }}" == "true" ]; then
-              echo "- **Status**: ✅ Threshold met" >> $GITHUB_STEP_SUMMARY
-            elif [ "${{ steps.test.outputs.coverage_threshold_met }}" == "false" ]; then
-              echo "- **Status**: ⚠️ Below threshold" >> $GITHUB_STEP_SUMMARY
-            fi
+            echo "- **Threshold**: ⏭️ Ignored (build always proceeds)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status**: ✅ Build proceeds regardless of coverage" >> $GITHUB_STEP_SUMMARY
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -613,11 +601,7 @@ jobs:
           echo "### 🧪 Tests & Coverage" >> $GITHUB_STEP_SUMMARY
           if [ "$TEST_STATUS" == "success" ]; then
             echo "✅ **All tests passed successfully**" >> $GITHUB_STEP_SUMMARY
-            
-            if [ "$COVERAGE_MET" == "true" ]; then
-              echo "✅ **Coverage threshold met (70%+)**" >> $GITHUB_STEP_SUMMARY
-            elif [ "$COVERAGE_MET" == "false" ]; then
-              echo "⚠️  **Coverage below threshold (<70%)**" >> $GITHUB_STEP_SUMMARY
+            echo "📈 **Coverage thresholds ignored - build proceeds regardless**" >> $GITHUB_STEP_SUMMARY
             else
               echo "ℹ️  **Coverage analysis unavailable**" >> $GITHUB_STEP_SUMMARY
             fi

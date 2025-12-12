@@ -1,6 +1,35 @@
 // Extend the default timeout for async operations
 jest.setTimeout(10000);
 
+// Suppress specific console warnings during tests
+const originalConsoleError = console.error;
+beforeEach(() => {
+  console.error = (...args) => {
+    // Suppress react-test-renderer deprecation warnings
+    if (
+      typeof args[0] === 'string' &&
+      args[0].includes('react-test-renderer is deprecated')
+    ) {
+      return;
+    }
+    
+    // Suppress act() warnings during tests
+    if (
+      typeof args[0] === 'string' &&
+      (args[0].includes('An update to') && args[0].includes('inside a test was not wrapped in act(...)'))
+    ) {
+      return;
+    }
+    
+    // Allow other errors through
+    originalConsoleError.apply(console, args);
+  };
+});
+
+afterEach(() => {
+  console.error = originalConsoleError;
+});
+
 // Mock React Native platform first
 jest.mock('react-native', () => {
   const React = require('react');

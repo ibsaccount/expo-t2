@@ -52,7 +52,9 @@
       "typedRoutes": false,
       "reactCompiler": true
     },
-    "plugins": [],
+    "plugins": [
+      "expo-dev-client"
+    ],
     "extra": {
       "router": {},
       "eas": {

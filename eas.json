@@ -22,6 +22,7 @@
       "env": {
         "NODE_ENV": "staging"
       },
+      "developmentClient": true,
       "distribution": "internal",
       "android": {
         "buildType": "apk",
@@ -57,6 +58,7 @@
       }
     },
     "preview": {
+      "developmentClient": true,
       "distribution": "internal",
       "android": {
         "buildType": "apk"

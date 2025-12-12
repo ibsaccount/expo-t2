@@ -2,6 +2,8 @@
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
+**🔥 Now using EAS Development Builds (expo-dev-client) instead of Expo Go!**
+
 ## Features
 
 - **Material Top Tabs Navigation** - Seamless navigation between "Me" and "My Team" views
@@ -9,8 +11,11 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 - **Synchronized Tab State** - Tab selection persists across Home and Timecard screens
 - **Modern UI Components** - Built with React Native and Expo
 - **Persistent Storage** - User preferences saved locally with AsyncStorage
+- **Development Builds** - Custom development client with full native module support
 
 ## Get started
+
+### Development with Custom Development Client
 
 1. Install dependencies
 
@@ -18,11 +23,44 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Build and install the development client on your device:
 
    ```bash
-   npx expo start
+   # Build development client for Android
+   npm run build:dev:android
+   
+   # Build development client for iOS  
+   npm run build:dev:ios
    ```
+
+3. Install the development build on your device from EAS
+
+4. Start the development server
+
+   ```bash
+   npm run start:dev
+   # or
+   npm start
+   ```
+
+5. Open your custom development client app and scan the QR code
+
+### Alternative: Expo Go (Limited functionality)
+
+If you need to use Expo Go temporarily:
+
+```bash
+npm run start:expo-go
+```
+
+### Prebuild (Generate Native Code)
+
+If you need to customize native code or add native modules:
+
+```bash
+npm run prebuild        # Generate android/ and ios/ folders
+npm run prebuild:clean  # Clean and regenerate native folders
+```
 
 ## Login Credentials
 

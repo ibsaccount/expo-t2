@@ -49,12 +49,10 @@
       "favicon": "./assets/images/favicon.png"
     },
     "experiments": {
-      "typedRoutes": true,
+      "typedRoutes": false,
       "reactCompiler": true
     },
-    "plugins": [
-      "expo-router"
-    ],
+    "plugins": [],
     "extra": {
       "router": {},
       "eas": {
